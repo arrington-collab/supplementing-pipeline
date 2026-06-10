@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Supplementing Pipeline â Days in Stage</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #1a1a1a; }
+  .container { max-width: 1080px; margin: 0 auto; padding: 2rem 1.5rem; }
+  .header { margin-bottom: 2rem; }
+  .header h1 { font-size: 22px; font-weight: 600; margin-bottom: 4px; }
+  .header .subtitle { font-size: 14px; color: #666; }
+  .print-btn { position: fixed; top: 16px; right: 16px; background: #1a1a1a; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-size: 13px; cursor: pointer; z-index: 100; }
+  .print-btn:hover { background: #333; }
+
+  .metric-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 2rem; }
+  .metric { background: #fff; border-radius: 10px; padding: 1rem 1.25rem; border: 1px solid #e8e8e8; }
+  .metric .label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .metric .value { font-size: 26px; font-weight: 600; }
+  .metric .value.warn { color: #d35400; }
+
+  .chart-section { background: #fff; border-radius: 10px; border: 1px solid #e8e8e8; padding: 1.5rem; margin-bottom: 2rem; }
+  .chart-section h2 { font-size: 16px; font-weight: 600; margin-bottom: 1rem; }
+  .chart-wrap { position: relative; width: 100%; }
+
+  .table-section { background: #fff; border-radius: 10px; border: 1px solid #e8e8e8; padding: 1.5rem; margin-bottom: 2rem; }
+  .table-section h2 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+  .table-section .note { font-size: 12px; color: #999; margin-bottom: 1rem; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { text-align: center; padding: 10px 6px; font-weight: 600; color: #666; border-bottom: 2px solid #e0e0e0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; }
+  thead th:first-child { text-align: left; }
+  tbody td { padding: 10px 6px; text-align: center; border-bottom: 1px solid #f0f0f0; }
+  tbody td:first-child { text-align: left; font-weight: 500; }
+  tbody tr:hover { background: #fafafa; }
+
+  .age-cell { font-weight: 600; }
+  .age-green { color: #1D9E75; }
+  .age-amber { color: #d4a017; }
+  .age-red { color: #c0392b; }
+
+  .badge { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .badge-red { background: #fde8e8; color: #a32d2d; }
+  .badge-amber { background: #fef3d5; color: #854f0b; }
+  .badge-green { background: #e1f5ee; color: #085041; }
+
+  .section-divider { margin: 2.5rem 0 1.5rem; padding-top: 2rem; border-top: 3px solid #1a1a1a; }
+  .section-divider h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .section-divider .sub { font-size: 13px; color: #666; }
+
+  .callout { background: #fef5f5; border: 1px solid #f5c4c4; border-radius: 10px; padding: 1.25rem; margin-bottom: 2rem; }
+  .callout h3 { font-size: 14px; font-weight: 600; color: #a32d2d; margin-bottom: 8px; }
+  .callout p { font-size: 13px; color: #555; line-height: 1.7; margin-bottom: 4px; }
+
+  .callout-blue { background: #eef6ff; border: 1px solid #b8d4f0; border-radius: 10px; padding: 1.25rem; margin-bottom: 2rem; }
+  .callout-blue h3 { font-size: 14px; font-weight: 600; color: #1a5fa3; margin-bottom: 8px; }
+  .callout-blue p { font-size: 13px; color: #555; line-height: 1.7; margin-bottom: 4px; }
+
+  .tabs { display: flex; gap: 2px; margin-bottom: 0; }
+  .tab { padding: 10px 20px; background: #eee; border-radius: 8px 8px 0 0; cursor: pointer; font-size: 13px; font-weight: 500; color: #666; border: 1px solid #e0e0e0; border-bottom: none; }
+  .tab.active { background: #fff; color: #1a1a1a; font-weight: 600; }
+  .tab-content { display: none; background: #fff; border: 1px solid #e0e0e0; border-radius: 0 10px 10px 10px; padding: 1.5rem; margin-bottom: 2rem; }
+  .tab-content.active { display: block; }
+  .tab-content table { margin-top: 8px; }
+
+  .methodology { background: #fafafa; border-radius: 10px; padding: 1.5rem; margin-bottom: 2rem; border: 1px solid #e8e8e8; }
+  .methodology h2 { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
+  .methodology p { font-size: 13px; color: #555; line-height: 1.7; margin-bottom: 8px; }
+
+  .footer { text-align: center; padding: 2rem 0; font-size: 12px; color: #aaa; }
+
+  @media print {
+    body { background: #fff; }
+    .print-btn { display: none; }
+    .container { padding: 0; }
+    .tab-content { display: block !important; page-break-inside: avoid; }
+    .section-divider { page-break-before: always; }
+    .badge-red { background: #fde8e8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .badge-amber { background: #fef3d5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .badge-green { background: #e1f5ee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<button class="print-btn" onclick="window.print()">&#128424; Print / PDF</button>
+
+<div class="container">
+  <div class="header">
+    <h1>Supplementing Pipeline â Days in Stage</h1>
+    <div class="subtitle">413 active claims across 7 stages (6 supplementing + Pre Const Review) &nbsp;|&nbsp; As of June 10, 2026</div>
+  </div>
+
+  <!-- TOP METRICS -->
+  <div class="metric-row">
+    <div class="metric">
+      <div class="label">Active claims</div>
+      <div class="value">413</div>
+    </div>
+    <div class="metric">
+      <div class="label">Avg days in stage</div>
+      <div class="value warn">99</div>
+    </div>
+    <div class="metric">
+      <div class="label">Median days</div>
+      <div class="value warn">26</div>
+    </div>
+    <div class="metric">
+      <div class="label">Claims 180+ days</div>
+      <div class="value warn">80</div>
+    </div>
+    <div class="metric">
+      <div class="label">Supplementers</div>
+      <div class="value">6</div>
+    </div>
+  </div>
+
+  <!-- STAGE OVERVIEW CHART -->
+  <div class="chart-section">
+    <h2>Claims by stage â SLA aging distribution</h2>
+    <div class="note" style="margin-bottom:8px;">Colors relative to each stage's SLA target â <span style="color:#1D9E75;font-weight:600;">green</span> = within SLA, <span style="color:#f1c40f;font-weight:600;">yellow</span> = 1â2Ã SLA, <span style="color:#e67e22;font-weight:600;">orange</span> = 2â3Ã SLA, <span style="color:#e74c3c;font-weight:600;">red</span> = 3Ã+ SLA &nbsp;|&nbsp; * Insurance-controlled stages use general time buckets</div>
+    <div class="chart-wrap" style="height:340px;">
+      <canvas id="agingChart"></canvas>
+    </div>
+  </div>
+
+  <!-- STAGE SUMMARY TABLE -->
+  <div class="table-section">
+    <h2>Stage summary</h2>
+    <div class="note">Days in stage calculated from the statusChanged field on each claim &nbsp;|&nbsp; Stages ordered by pipeline flow</div>
+    <table>
+      <thead>
+        <tr>
+          <th style="text-align:left;">Stage</th>
+          <th>Claims</th>
+          <th>Target</th>
+          <th>Over SLA</th>
+          <th>Avg days</th>
+          <th>Median</th>
+          <th>Max</th>
+          <th style="color:#1D9E75;">Within SLA</th>
+          <th style="color:#f1c40f;">1â2Ã SLA</th>
+          <th style="color:#e67e22;">2â3Ã SLA</th>
+          <th style="color:#e74c3c;">3Ã+ SLA</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Review 1st EST</td>
+          <td>9</td>
+          <td>1 biz day</td><td><span class="badge badge-red">3</span></td>
+          <td class="age-cell age-green">2</td>
+          <td>2</td>
+          <td>5</td>
+          <td><span class="badge badge-green">6</span></td><td>2</td><td>1</td><td>0</td>
+        </tr>
+        <tr>
+          <td>Pending Supp</td>
+          <td>53</td>
+          <td>3 biz days</td><td><span class="badge badge-red">44</span></td>
+          <td class="age-cell age-amber">37</td>
+          <td>13</td>
+          <td>407</td>
+          <td>9</td><td>13</td><td>10</td><td><span class="badge badge-red">21</span></td>
+        </tr>
+        <tr>
+          <td>Active Supp Negotiations</td>
+          <td>227</td>
+          <td>60 cal days</td><td><span class="badge badge-red">114</span></td>
+          <td class="age-cell age-red">94</td>
+          <td>62</td>
+          <td>855</td>
+          <td><span class="badge badge-green">113</span></td><td>45</td><td>36</td><td><span class="badge badge-red">33</span></td>
+        </tr>
+        <tr>
+          <td>APPR Send Demand</td>
+          <td>7</td>
+          <td>2 biz days</td><td><span class="badge badge-red">6</span></td>
+          <td class="age-cell age-green">9</td>
+          <td>7</td>
+          <td>14</td>
+          <td>1</td><td>3</td><td>1</td><td><span class="badge badge-red">2</span></td>
+        </tr>
+        <tr>
+          <td>APPR Pend Ack</td>
+          <td>27</td>
+          <td style="color:#999;">Insurance</td><td style="color:#999;">â</td>
+          <td class="age-cell age-amber">70</td>
+          <td>14</td>
+          <td>393</td>
+          <td>14</td><td>7</td><td>0</td><td><span class="badge badge-red">6</span></td>
+        </tr>
+        <tr>
+          <td>APPR Pend Est</td>
+          <td>82</td>
+          <td style="color:#999;">Insurance</td><td style="color:#999;">â</td>
+          <td class="age-cell age-red">190</td>
+          <td>181</td>
+          <td>1,169</td>
+          <td>12</td><td>14</td><td>0</td><td><span class="badge badge-red">56</span></td>
+        </tr>
+        <tr>
+          <td>APPR Review Est</td>
+          <td>0</td>
+          <td>2 biz days</td><td><span class="badge badge-green">0</span></td>
+          <td class="age-cell age-green">â</td>
+          <td>â</td>
+          <td>â</td>
+          <td>0</td><td>0</td><td>0</td><td>0</td>
+        </tr>
+        <tr>
+          <td>Pre Const Review</td>
+          <td>8</td>
+          <td>2 biz days</td><td><span class="badge badge-green">7</span></td>
+          <td class="age-cell age-green">2</td>
+          <td>0</td>
+          <td>10</td>
+          <td><span class="badge badge-green">7</span></td><td>0</td><td>1</td><td>0</td>
+        </tr>
+        <tr style="font-weight:700;border-top:2px solid #333;">
+          <td>TOTAL</td>
+          <td>413</td>
+          <td></td><td></td>
+          <td class="age-cell age-red">99</td>
+          <td>26</td>
+          <td>1,169</td>
+          <td>162</td><td>84</td><td>49</td><td>118</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout">
+    <h3>Bottleneck: APPR Pend Est â 82 claims averaging 190 days</h3>
+    <p>Half of the 82 claims (41) have been waiting <strong>over 180 days</strong> for an appraisal estimate. The oldest claim (629 N. Mesa Dr.) has sat in this stage for <strong>1,169 days (3.2 years)</strong>. This stage alone accounts for nearly half of all 180+ day claims in the supplementing pipeline.</p>
+  </div>
+
+  <div class="callout">
+    <h3>Active Supp Negotiations â 227 claims, largest backlog</h3>
+    <p>Over half the supplementing pipeline (227 of 413) sits in Active Supp Negotiations. Against the 60-day SLA, <strong>114 claims (50%)</strong> are over target. 33 claims exceed 3x the SLA (180+ days). The longest is 410 W Mission Dr. at 855 days.</p>
+  </div>
+
+  <!-- PA WORKLOAD -->
+  <div class="section-divider">
+    <h1>Workload by assigned PA</h1>
+    <div class="sub">413 claims across 6 primary supplementers &nbsp;|&nbsp; Avg days in stage per PA</div>
+  </div>
+
+  <div class="chart-section">
+    <h2>Claims per supplementer â by stage</h2>
+    <div class="chart-wrap" style="height:300px;">
+      <canvas id="paChart"></canvas>
+    </div>
+  </div>
+
+  <div class="table-section">
+    <h2>PA workload breakdown</h2>
+    <div class="note">Count (avg days in stage) per PA per stage</div>
+    <table>
+      <thead>
+        <tr>
+          <th style="text-align:left;">PA</th>
+          <th>Total</th>
+          <th>Rev 1st</th>
+          <th>Pend Supp</th>
+          <th>Active Neg</th>
+          <th>APPR Demand</th>
+          <th>APPR Ack</th>
+          <th>APPR Est</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Daniel Davila</td>
+          <td><strong>83</strong></td>
+          <td>3 <span style="color:#999;font-size:11px;">(3d)</span></td>
+          <td>10 <span style="color:#999;font-size:11px;">(69d)</span></td>
+          <td>48 <span style="color:#999;font-size:11px;">(97d)</span></td>
+          <td>0</td>
+          <td>7 <span style="color:#999;font-size:11px;">(106d)</span></td>
+          <td>15 <span style="color:#999;font-size:11px;">(205d)</span></td>
+        </tr>
+        <tr>
+          <td>Raphael Rivera</td>
+          <td><strong>67</strong></td>
+          <td>0</td>
+          <td>11 <span style="color:#999;font-size:11px;">(20d)</span></td>
+          <td>33 <span style="color:#999;font-size:11px;">(115d)</span></td>
+          <td>2 <span style="color:#999;font-size:11px;">(9d)</span></td>
+          <td>3 <span style="color:#999;font-size:11px;">(5d)</span></td>
+          <td>18 <span style="color:#999;font-size:11px;">(293d)</span></td>
+        </tr>
+        <tr>
+          <td>Sheena Lalunio</td>
+          <td><strong>67</strong></td>
+          <td>2 <span style="color:#999;font-size:11px;">(1d)</span></td>
+          <td>8 <span style="color:#999;font-size:11px;">(15d)</span></td>
+          <td>35 <span style="color:#999;font-size:11px;">(100d)</span></td>
+          <td>2 <span style="color:#999;font-size:11px;">(8d)</span></td>
+          <td>6 <span style="color:#999;font-size:11px;">(15d)</span></td>
+          <td>14 <span style="color:#999;font-size:11px;">(152d)</span></td>
+        </tr>
+        <tr>
+          <td>David Delgado</td>
+          <td><strong>64</strong></td>
+          <td>2 <span style="color:#999;font-size:11px;">(2d)</span></td>
+          <td>9 <span style="color:#999;font-size:11px;">(14d)</span></td>
+          <td>33 <span style="color:#999;font-size:11px;">(77d)</span></td>
+          <td>1 <span style="color:#999;font-size:11px;">(14d)</span></td>
+          <td>5 <span style="color:#999;font-size:11px;">(12d)</span></td>
+          <td>14 <span style="color:#999;font-size:11px;">(193d)</span></td>
+        </tr>
+        <tr>
+          <td>Emmanuel Reblora</td>
+          <td><strong>58</strong></td>
+          <td>2 <span style="color:#999;font-size:11px;">(3d)</span></td>
+          <td>9 <span style="color:#999;font-size:11px;">(10d)</span></td>
+          <td>33 <span style="color:#999;font-size:11px;">(93d)</span></td>
+          <td>2 <span style="color:#999;font-size:11px;">(6d)</span></td>
+          <td>5 <span style="color:#999;font-size:11px;">(14d)</span></td>
+          <td>7 <span style="color:#999;font-size:11px;">(196d)</span></td>
+        </tr>
+        <tr>
+          <td>Mary Facio Rubio</td>
+          <td><strong>59</strong></td>
+          <td>0</td>
+          <td>6 <span style="color:#999;font-size:11px;">(29d)</span></td>
+          <td>39 <span style="color:#999;font-size:11px;">(60d)</span></td>
+          <td>0</td>
+          <td>0</td>
+          <td>14 <span style="color:#999;font-size:11px;">(80d)</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout-blue">
+    <h3>PA performance notes</h3>
+    <p><strong>Mary Facio Rubio</strong> has the lowest avg days across all stages (56 days overall) â her APPR Pend Est claims average 80 days vs the team average of 190. She moves claims fastest.</p>
+    <p><strong>Raphael Rivera</strong> has the highest APPR Pend Est average at 293 days across 18 claims â the longest individual backlog in the appraisal queue.</p>
+    <p><strong>Daniel Davila</strong> carries the most claims (91) and his Active Supp Negotiations average 97 days â close to team average but with the heaviest volume.</p>
+  </div>
+
+  <!-- CLAIM DETAIL TABS -->
+  <div class="section-divider">
+    <h1>Claim detail by stage</h1>
+    <div class="sub">All 413 claims â sorted by days in stage (longest first) &nbsp;|&nbsp; Click a stage tab to view</div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="showTab('active-supp')">Active Supp (227)</div>
+    <div class="tab" onclick="showTab('appr-est')">APPR Est (82)</div>
+    <div class="tab" onclick="showTab('pend-supp')">Pend Supp (53)</div>
+    <div class="tab" onclick="showTab('appr-ack')">APPR Ack (27)</div>
+    <div class="tab" onclick="showTab('appr-review')">APPR Review (0)</div>
+    <div class="tab" onclick="showTab('pre-const')">Pre Const (8)</div>
+    <div class="tab" onclick="showTab('other')">Other (16)</div>
+  </div>
+
+  <div class="tab-content active" id="tab-active-supp"></div>
+  <div class="tab-content" id="tab-appr-est"></div>
+  <div class="tab-content" id="tab-pend-supp"></div>
+  <div class="tab-content" id="tab-appr-ack"></div>
+  <div class="tab-content" id="tab-appr-review"></div>
+  <div class="tab-content" id="tab-pre-const"></div>
+  <div class="tab-content" id="tab-other"></div>
+
+  <!-- METHODOLOGY -->
+  <div class="methodology">
+    <h2>Methodology</h2>
+    <p><strong>Days in stage</strong> is calculated from the <code>statusChanged</code> field on each Claim record in ClaimsForce. This field records the timestamp of the most recent status change. For claims without a <code>statusChanged</code> value, the claim creation date is used as a fallback (these claims may have been in their current stage since creation).</p>
+    <p><strong>Stages tracked:</strong> Review 1st EST, Pending Supp, Active Supp Negotaitions, APPR Send Demand, APPR Pend Ack, APPR Pend Est, APPR Review Est, Pre Const Review. Pending Estimate is excluded as that stage represents waiting on insurance. SLA targets are set for stages within Advosy control; APPR Pend Ack and APPR Pend Est are insurance-dependent with no internal target.</p>
+    <p><strong>Assigned PA</strong> reflects the current <code>assignedUser</code> on each claim. 6 supplementers handle the majority of 413 claims.</p>
+  </div>
+
+  <div class="footer">
+    Advosy &nbsp;|&nbsp; Supplementing Pipeline â Days in Stage &nbsp;|&nbsp; Generated June 10, 2026
+  </div>
+</div>
+
+<script>
+Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+Chart.defaults.font.size = 11;
+
+// ===== Aging Distribution Chart (SLA-based color bands) =====
+var stageLabels = ['Review 1st EST','Pending Supp','Active Supp Neg','APPR Demand','APPR Ack*','APPR Pend Est*','APPR Review','Pre Const Rev'];
+// SLA targets (calendar days): Review=2, PendSupp=5, ActiveNeg=60, Demand=4, Ack=N/A, PendEst=N/A, Review=4, PreConst=4
+// * = Insurance-controlled (no internal SLA) â uses general time buckets instead
+var slaTargets = [2, 5, 60, 4, null, null, 4, 4];
+var slaBands = slaTargets.map(function(t) {
+  if (t === null) return ['0â14d','15â30d','31â90d','90+d'];
+  return ['â¤' + t + 'd', (t+1) + 'â' + (t*2) + 'd', (t*2+1) + 'â' + (t*3) + 'd', (t*3+1) + '+d'];
+});
+new Chart(document.getElementById('agingChart'), {
+  type: 'bar',
+  data: {
+    labels: stageLabels,
+    datasets: [
+      { label: 'Within SLA', data: [6,9,113,1,14,12,0,7], backgroundColor: '#1D9E75', borderRadius: 2 },
+      { label: '1â2x SLA', data: [2,13,45,3,7,14,0,0], backgroundColor: '#f1c40f', borderRadius: 2 },
+      { label: '2â3x SLA', data: [1,10,36,1,0,0,0,1], backgroundColor: '#e67e22', borderRadius: 2 },
+      { label: '3x+ SLA', data: [0,21,33,2,6,56,0,0], backgroundColor: '#e74c3c', borderRadius: 2 }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
+      tooltip: {
+        callbacks: {
+          label: function(ctx) {
+            var i = ctx.dataIndex;
+            var band = slaBands[i][ctx.datasetIndex];
+            return band + ': ' + ctx.raw + ' claims';
+          },
+          afterBody: function(items) {
+            var i = items[0].dataIndex;
+            var t = slaTargets[i];
+            return t ? 'SLA target: ' + t + ' calendar days' : 'Insurance-controlled (no internal SLA)';
+          }
+        }
+      }
+    },
+    scales: {
+      x: { stacked: true, grid: { display: false } },
+      y: { stacked: true, title: { display: true, text: 'Claims' } }
+    }
+  }
+});
+
+// ===== PA Workload Chart =====
+new Chart(document.getElementById('paChart'), {
+  type: 'bar',
+  data: {
+    labels: ['Daniel Davila','Raphael Rivera','Sheena Lalunio','David Delgado','Emmanuel Reblora','Mary Facio Rubio'],
+    datasets: [
+      { label: 'Rev 1st EST', data: [3,0,2,2,2,0], backgroundColor: '#1abc9c', borderRadius: 2 },
+      { label: 'Pend Supp', data: [10,11,8,9,9,6], backgroundColor: '#2ecc71', borderRadius: 2 },
+      { label: 'Active Neg', data: [48,33,35,33,33,39], backgroundColor: '#e67e22', borderRadius: 2 },
+      { label: 'APPR Demand', data: [0,2,2,1,2,0], backgroundColor: '#9b59b6', borderRadius: 2 },
+      { label: 'APPR Ack', data: [7,3,6,5,5,0], backgroundColor: '#e74c3c', borderRadius: 2 },
+      { label: 'APPR Est', data: [15,18,14,14,7,14], backgroundColor: '#8e1a1a', borderRadius: 2 }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 10 } } } },
+    scales: {
+      x: { stacked: true, grid: { display: false } },
+      y: { stacked: true, title: { display: true, text: 'Claims' } }
+    }
+  }
+});
+
+// ===== Claim Detail Tabs =====
+var claimData = [{"n":"629 N. Mesa Dr.","s":"APPR Pend Est","pa":"Raphael Rivera","d":1169,"e":"2023-03-29","dol":"2023-01-01","rcv":0,"sup":"Jesse"},{"n":"410 W Mission Dr.","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":855,"e":"2024-02-06","dol":"2023-06-18","rcv":0,"sup":"Brett"},{"n":"19231 E. Via De Palmas","s":"APPR Pend Est","pa":"Raphael Rivera","d":593,"e":"2024-10-25","dol":"2024-06-02","rcv":0,"sup":"Dillon"},{"n":"978 N. High St.","s":"APPR Pend Est","pa":"Raphael Rivera","d":552,"e":"2024-12-05","dol":"2024-06-20","rcv":602.02,"sup":"Jesse"},{"n":"3455 N 48th Ave","s":"APPR Pend Est","pa":"David Delgado Lopez","d":485,"e":"2025-02-10","dol":"2024-07-24","rcv":0,"sup":"Isaac"},{"n":"4670 East San Francisco Boulevard,","s":"APPR Pend Est","pa":"Raphael Rivera","d":470,"e":"2025-02-25","dol":"2024-07-11","rcv":0,"sup":"Isaac"},{"n":"5224 Annie Oakley Dr.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":450,"e":"2025-03-17","dol":"2024-06-20","rcv":2508.72,"sup":"Geoff"},{"n":"1861 E. 6th Ave.","s":"APPR Pend Est","pa":"Daniel D\u00e1vila Mora","d":427,"e":"2025-04-09","dol":"2024-07-24","rcv":0,"sup":"Jesse"},{"n":"702 E. Millett Ave.","s":"APPR Pend Est","pa":"Daniel D\u00e1vila Mora","d":414,"e":"2025-04-22","dol":"2024-07-24","rcv":491.1,"sup":"Jesse"},{"n":"7373 E. Dixileta Dr.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":412,"e":"2025-04-24","dol":"2024-11-02","rcv":0,"sup":"Geoff"},{"n":"749 W. Gail Dr.","s":"APPR Pend Est","pa":"Mary Facio Rubio","d":408,"e":"2025-04-28","dol":"2024-07-24","rcv":533.61,"sup":"Jesse"},{"n":"713 N. Princeton St.","s":"Pending Supp","pa":"Daniel D\u00e1vila Mora","d":407,"e":"2025-04-29","dol":"2025-03-13","rcv":526.09,"sup":"Geoff"},{"n":"2453 E. Garnet Ave.","s":"APPR Pend Est","pa":"David Delgado Lopez","d":405,"e":"2025-05-01","dol":"2025-03-13","rcv":592.05,"sup":"Hazelene"},{"n":"7949 W. Indian School Rd. (WIND)","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":394,"e":"2025-05-12","dol":"2024-07-24","rcv":14614.88,"sup":"Geoff"},{"n":"237 N. Harris Dr.","s":"APPR Pend Ack","pa":"David Delgado Lopez","d":393,"e":"2025-05-13","dol":"2025-03-13","rcv":8713.32,"sup":"Jesse"},{"n":"15 E. 1st Ave.","s":"APPR Pend Est","pa":"Daniel D\u00e1vila Mora","d":391,"e":"2025-05-15","dol":"2023-09-12","rcv":8284.51,"sup":"Geoff"},{"n":"6390 E. Broadway Blvd. Ste 100","s":"APPR Pend Est","pa":"Raphael Rivera","d":387,"e":"2025-05-19","dol":"2024-08-01","rcv":0,"sup":"Jesse"},{"n":"3104 W. Glendale Ave.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":386,"e":"2025-05-20","dol":"2024-07-24","rcv":0,"sup":"Geoff"},{"n":"3463 E. Enid Ave.","s":"APPR Pend Est","pa":"Sheena Lalunio","d":383,"e":"2025-05-23","dol":"2025-03-13","rcv":593.91,"sup":"Geoff"},{"n":"655 N. Craycroft Rd.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":372,"e":"2025-06-03","dol":"2023-07-19","rcv":140284.95,"sup":"Geoff"},{"n":"4625 E. River Rd.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":371,"e":"2025-06-04","dol":"2023-07-26","rcv":7630.73,"sup":"Geoff"},{"n":"521 S Maryland Parkway","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":365,"e":"2025-06-10","dol":"2025-06-03","rcv":923026.52,"sup":"Jesse"},{"n":"6042 S. Birchwood Dr.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":350,"e":"2025-06-26","dol":"2024-07-24","rcv":0,"sup":"Isaac"},{"n":"597 Main St.","s":"APPR Pend Ack","pa":"Daniel D\u00e1vila Mora","d":345,"e":"2025-06-30","dol":"2023-07-30","rcv":0,"sup":"Geoff"},{"n":"3600 N. 4th St.","s":"APPR Pend Ack","pa":"Daniel D\u00e1vila Mora","d":345,"e":"2025-06-30","dol":"2024-07-15","rcv":0,"sup":"Geoff"},{"n":"2178 Whippletree Ave.","s":"APPR Pend Est","pa":"Emmanuel Reblora","d":342,"e":"2025-07-04","dol":"2025-05-06","rcv":0,"sup":"Isaac"},{"n":"4810 E. Emile Zola Ave.","s":"APPR Pend Est","pa":"Emmanuel Reblora","d":329,"e":"2025-07-17","dol":"2025-05-17","rcv":1037.48,"sup":"Geoff"},{"n":"2437 Georgia Ave","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":323,"e":"2025-07-22","dol":"2024-09-08","rcv":5045.22,"sup":"Dillon"},{"n":"2625 Canyon Crest St.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":319,"e":"2025-07-27","dol":"2025-07-13","rcv":1486.88,"sup":"Geoff"},{"n":"1130 Taylor Dr.","s":"APPR Pend Est","pa":"Daniel D\u00e1vila Mora","d":299,"e":"2025-08-16","dol":"2022-08-16","rcv":0,"sup":"Geoff"},{"n":"1136 Taylor Dr.","s":"APPR Pend Est","pa":"Daniel D\u00e1vila Mora","d":292,"e":"2025-08-22","dol":"2025-07-13","rcv":2963.28,"sup":"Geoff"},{"n":"74 W. 11th Dr.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":288,"e":"2025-08-27","dol":"2025-08-25","rcv":660.93,"sup":"Chris Dockendorff"},{"n":"658 W. Plata Ave.","s":"APPR Pend Est","pa":"Daniel D\u00e1vila Mora","d":287,"e":"2025-08-28","dol":"2025-08-25","rcv":5050.35,"sup":"Hazelene"},{"n":"1646 E.  Jarvis Ave.","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":278,"e":"2025-09-05","dol":"2025-08-28","rcv":9341.31,"sup":"Dillon"},{"n":"1455 E. University","s":"Active Supp Negotaitions","pa":"Brett Ray","d":271,"e":"2025-09-12","dol":"2025-08-25","rcv":0,"sup":"Brett"},{"n":"516 Orr Ave.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":268,"e":"2025-09-16","dol":"2025-09-26","rcv":0,"sup":"Geoff"},{"n":"6845 S Apache Dr","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":266,"e":"2025-09-18","dol":"2025-06-30","rcv":5642.32,"sup":"Dillon"},{"n":"1552 N. Sterling","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":266,"e":"2025-09-18","dol":"2025-08-25","rcv":816.1,"sup":"Geoff"},{"n":"8032 W. Windrose Dr.","s":"APPR Pend Est","pa":"Emmanuel Reblora","d":255,"e":"2025-09-29","dol":"2025-09-26","rcv":0,"sup":"Jesse"},{"n":"2009 E. Laguna Dr.","s":"APPR Pend Est","pa":"Raphael Rivera","d":255,"e":"2025-09-29","dol":"2025-08-25","rcv":1842.13,"sup":"Hazelene"},{"n":"542 Stahlman Dr.","s":"APPR Pend Est","pa":"Sheena Lalunio","d":253,"e":"2025-10-01","dol":"2025-08-23","rcv":0,"sup":"Dillon"},{"n":"3944 W. Virginia Ave.","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":251,"e":"2025-10-03","dol":"2025-09-26","rcv":0,"sup":"Geoff"},{"n":"10951 N 91st Ave lot 20","s":"APPR Pend Est","pa":"Emmanuel Reblora","d":250,"e":"2025-10-03","dol":"2025-08-25","rcv":0,"sup":"Dillon"},{"n":"8225 E. Sharon Dr.","s":"APPR Pend Est","pa":"Raphael Rivera","d":248,"e":"2025-10-06","dol":"2025-09-26","rcv":12635.9,"sup":"Isaac"},{"n":"2428 N. Geronimo Ave.","s":"APPR Pend Est","pa":"David Delgado Lopez","d":243,"e":"2025-10-10","dol":"2024-07-02","rcv":4949.32,"sup":"Isaac"},{"n":"1415 E Julie Dr.","s":"APPR Pend Est","pa":"Raphael Rivera","d":239,"e":"2025-10-15","dol":"2025-10-13","rcv":842.6,"sup":"Jesse"},{"n":"400 W Baseline Rd. Lot 20","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":238,"e":"2025-10-15","dol":"2025-10-13","rcv":0,"sup":"Geoff"},{"n":"1407 E Bell De Mar Dr.","s":"APPR Pend Est","pa":"Raphael Rivera","d":238,"e":"2025-10-15","dol":"2025-10-11","rcv":719.82,"sup":"Geoff"},{"n":"1839 E Almeria Rd.","s":"APPR Pend Est","pa":"Raphael Rivera","d":237,"e":"2025-10-16","dol":"2025-09-26","rcv":1105.48,"sup":"Dillon"},{"n":"675 N. Perkins Ave.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":233,"e":"2025-10-21","dol":"2024-08-19","rcv":9075.8,"sup":"Hazelene"},{"n":"3016 S. Fairway Dr.","s":"APPR Pend Est","pa":"Raphael Rivera","d":230,"e":"2025-10-23","dol":"2025-10-13","rcv":0,"sup":"Isaac"},{"n":"800 N. Mary Street","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":230,"e":"2025-10-24","dol":"2025-10-13","rcv":43980.29,"sup":"Geoff"},{"n":"504 E. Wesleyan Dr.","s":"APPR Pend Ack","pa":"Mary Facio Rubio","d":230,"e":"2025-10-24","dol":"2025-10-13","rcv":0,"sup":"Hazelene"},{"n":"319 W Chilton St.","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":226,"e":"2025-10-27","dol":"2025-10-13","rcv":3128.68,"sup":"Geoff"},{"n":"854 S 35th Pl","s":"Active Supp Negotaitions","pa":"Josh Williamson","d":226,"e":"2025-10-27","dol":"2025-10-10","rcv":0,"sup":"Dillon"},{"n":"5211 W Granada Rd","s":"APPR Pend Est","pa":"David Delgado Lopez","d":226,"e":"2025-10-27","dol":"2025-09-27","rcv":0,"sup":"Dillon"},{"n":"1200 E. Southern Ave.","s":"APPR Pend Est","pa":"Daniel D\u00e1vila Mora","d":224,"e":"2025-10-30","dol":"2025-04-18","rcv":1014.24,"sup":"Geoff"},{"n":"9527 W. Manzanita Dr.","s":"APPR Pend Est","pa":"Daniel D\u00e1vila Mora","d":223,"e":"2025-10-31","dol":"2025-09-26","rcv":844.7,"sup":"Jesse"},{"n":"1755 S Houghton Rd.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":220,"e":"2025-11-03","dol":"2025-10-11","rcv":0,"sup":"Geoff"},{"n":"5613 E Calle San Angelo","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":218,"e":"2025-11-04","dol":"2025-10-13","rcv":0,"sup":"Geoff"},{"n":"4320 N. Benton St.","s":"APPR Pend Est","pa":"Sheena Lalunio","d":218,"e":"2025-11-04","dol":"2025-08-23","rcv":265.27,"sup":"Jesse"},{"n":"12420 N Columbine Dr.","s":"APPR Pend Est","pa":"Daniel D\u00e1vila Mora","d":216,"e":"2025-11-06","dol":"2025-10-13","rcv":0,"sup":"Dillon"},{"n":"10432 E. Port Townsend St.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":216,"e":"2025-11-07","dol":"2025-09-25","rcv":0,"sup":"Geoff"},{"n":"5550 E Drummer Ave.","s":"APPR Pend Est","pa":"Sheena Lalunio","d":212,"e":"2025-11-10","dol":"2025-08-25","rcv":545.76,"sup":"Jesse"},{"n":"2916 Holly Hill Ave.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":210,"e":"2025-11-12","dol":"2025-09-26","rcv":0,"sup":"Dillon"},{"n":"1910 South Plumer Ave.","s":"APPR Pend Est","pa":"Raphael Rivera","d":205,"e":"2025-11-17","dol":"2024-08-08","rcv":0,"sup":"Geoff"},{"n":"5903 S. College Ave.","s":"APPR Pend Est","pa":"Sheena Lalunio","d":205,"e":"2025-11-18","dol":"2025-10-13","rcv":0,"sup":"Jesse"},{"n":"708 Cragin Park Dr.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":203,"e":"2025-11-19","dol":"2025-09-26","rcv":20098.5,"sup":"Dillon"},{"n":"1511 E. Flossmoor Ave.","s":"APPR Pend Est","pa":"Sheena Lalunio","d":203,"e":"2025-11-20","dol":"2025-10-13","rcv":831.9,"sup":"Hazelene"},{"n":"1204 E. Fremont Dr.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":199,"e":"2025-11-24","dol":"2025-10-13","rcv":3643.62,"sup":"Dillon"},{"n":"7725 W. Mitchell Dr.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":199,"e":"2025-11-24","dol":"2025-11-19","rcv":12552.54,"sup":"Jesse"},{"n":"2048 E. Rice Drive","s":"APPR Pend Est","pa":"Sheena Lalunio","d":199,"e":"2025-11-24","dol":"2025-10-13","rcv":0,"sup":"Geoff"},{"n":"4250 E. Downing St.","s":"APPR Pend Est","pa":"Emmanuel Reblora","d":198,"e":"2025-11-24","dol":"2024-07-25","rcv":15144.12,"sup":"Dillon"},{"n":"1947 E 6th Ave.","s":"APPR Pend Est","pa":"Sheena Lalunio","d":191,"e":"2025-12-01","dol":"2025-11-18","rcv":0,"sup":"Geoff"},{"n":"8301 N. 103rd Ave.  Lot 33","s":"APPR Pend Ack","pa":"Sheena Lalunio","d":190,"e":"2025-12-03","dol":"2025-06-02","rcv":0,"sup":"Isaac"},{"n":"7933 W. Monterosa","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":190,"e":"2025-12-03","dol":"2025-11-19","rcv":0,"sup":"Dillon"},{"n":"6907 W. Crittenden Ln.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":188,"e":"2025-12-04","dol":"2025-11-19","rcv":0,"sup":"Geoff"},{"n":"715 W. 11th St.","s":"APPR Pend Est","pa":"Emmanuel Reblora","d":183,"e":"2025-12-09","dol":"2025-10-13","rcv":1075.06,"sup":"Jesse"},{"n":"1632 E. Commerce Ave.","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":181,"e":"2025-12-11","dol":"2025-10-13","rcv":6289.93,"sup":"Geoff"},{"n":"6953 W Solano Dr S","s":"APPR Pend Est","pa":"David Delgado Lopez","d":181,"e":"2025-12-12","dol":"2025-10-11","rcv":0,"sup":"Isaac"},{"n":"2133 W Hartford Ave.","s":"APPR Pend Est","pa":"Emmanuel Reblora","d":177,"e":"2025-12-15","dol":"2025-10-13","rcv":0,"sup":"Geoff"},{"n":"1955 W Village Dr.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":177,"e":"2025-12-15","dol":"2025-09-01","rcv":6333.94,"sup":"Dillon"},{"n":"2424 S. Mill Ave.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":176,"e":"2025-12-17","dol":"2025-09-26","rcv":0,"sup":"Geoff"},{"n":"301 Broxton Ln","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":175,"e":"2025-12-18","dol":"2025-09-26","rcv":0,"sup":"Geoff"},{"n":"1980 S 10th Ave.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":175,"e":"2025-12-18","dol":"2025-09-04","rcv":564.93,"sup":"Isaac"},{"n":"10133 E. 37th St.","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":175,"e":"2025-12-18","dol":"2025-09-04","rcv":610.9,"sup":"Dillon"},{"n":"1321 W. Hillside Pl.","s":"APPR Pend Est","pa":"Sheena Lalunio","d":174,"e":"2025-12-19","dol":"2025-09-04","rcv":9944.55,"sup":"Jesse"},{"n":"2235 W. Wagoner Rd.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":174,"e":"2025-12-19","dol":"2025-09-26","rcv":9548.62,"sup":"Dillon"},{"n":"1228 E. Indigo St.","s":"APPR Pend Est","pa":"Mary Facio Rubio","d":173,"e":"2025-12-19","dol":"2025-09-26","rcv":1609.86,"sup":"Jesse"},{"n":"3019 N. 56th Dr.","s":"APPR Pend Est","pa":"Mary Facio Rubio","d":170,"e":"2025-12-23","dol":"2025-09-26","rcv":0,"sup":"Jesse"},{"n":"4489 Laurel Ln.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":169,"e":"2025-12-23","dol":"2025-09-28","rcv":0,"sup":"Isaac"},{"n":"7949 W. Indian School Rd. (Vandalism)","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":169,"e":"2025-12-23","dol":"2024-11-02","rcv":0,"sup":"Geoff"},{"n":"39903 N. Majesty Trl.","s":"APPR Pend Est","pa":"Raphael Rivera","d":162,"e":"2025-12-31","dol":"2025-10-11","rcv":4698.6,"sup":"Jesse"},{"n":"466 E. Fairfield St.","s":"APPR Pend Est","pa":"Sheena Lalunio","d":162,"e":"2025-12-31","dol":"2025-09-27","rcv":0,"sup":"Dillon"},{"n":"8103 E. Southern Lot 297","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":157,"e":"2026-01-05","dol":"2025-10-13","rcv":0,"sup":"Hazelene"},{"n":"1827 E Burgess Ln","s":"Active Supp Negotaitions","pa":"Ty Dale","d":155,"e":"2026-01-06","dol":"2025-10-11","rcv":0,"sup":"Dillon"},{"n":"6533 W Cheery Lynn Road","s":"APPR Pend Est","pa":"Sheena Lalunio","d":154,"e":"2026-01-07","dol":"2025-10-13","rcv":0,"sup":"Dillon"},{"n":"3110 N. 63rd Ave.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":152,"e":"2026-01-09","dol":"2025-10-13","rcv":10276.26,"sup":"Jae Marayag"},{"n":"917 N.  95th street","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":148,"e":"2026-01-14","dol":"2025-10-13","rcv":0,"sup":"Dillon"},{"n":"317 S. Lorenzi St.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":147,"e":"2026-01-14","dol":"2026-01-08","rcv":8782.44,"sup":"Geoff"},{"n":"824 N. 24th St.","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":147,"e":"2026-01-14","dol":"2026-01-08","rcv":1986.04,"sup":"Geoff"},{"n":"1933 W. Chardonnay Dr.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":146,"e":"2026-01-15","dol":"2025-07-02","rcv":0,"sup":"Geoff"},{"n":"602 E. Tyson St.","s":"APPR Pend Est","pa":"Daniel D\u00e1vila Mora","d":146,"e":"2026-01-15","dol":"2025-03-13","rcv":889.59,"sup":"Geoff"},{"n":"3129 Carroll St.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":146,"e":"2026-01-16","dol":"2025-02-13","rcv":0,"sup":"Geoff"},{"n":"7949 W. Indian School Rd. (HAIL)","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":146,"e":"2026-01-16","dol":"2022-10-16","rcv":0,"sup":"Geoff"},{"n":"334 E. Harwell Road","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":145,"e":"2026-01-16","dol":"2025-10-13","rcv":0,"sup":"Dillon"},{"n":"5196 W. Lake Mead Blvd.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":145,"e":"2026-01-16","dol":"2026-01-08","rcv":11616.84,"sup":"Geoff"},{"n":"1054 S. Main Dr.","s":"APPR Pend Est","pa":"Raphael Rivera","d":142,"e":"2026-01-19","dol":"2025-09-01","rcv":0,"sup":"Dillon"},{"n":"209 Tighe Way","s":"APPR Pend Est","pa":"Sheena Lalunio","d":142,"e":"2026-01-19","dol":"2026-01-08","rcv":871.61,"sup":"Jesse"},{"n":"5152 W. Willow Ave.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":142,"e":"2026-01-19","dol":"2025-11-20","rcv":0,"sup":"Hazelene"},{"n":"737 N. Benton Ave.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":139,"e":"2026-01-22","dol":"2025-09-27","rcv":8924.39,"sup":"Chris Dockendorff"},{"n":"4348 E. 15th St.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":139,"e":"2026-01-22","dol":"2025-07-03","rcv":1219.18,"sup":"Jae Marayag"},{"n":"6330 W Flower St","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":139,"e":"2026-01-23","dol":"2025-10-13","rcv":712.91,"sup":"Dillon"},{"n":"5693 E. 21st St.","s":"APPR Pend Est","pa":"Sheena Lalunio","d":139,"e":"2026-01-23","dol":"2025-07-03","rcv":662.47,"sup":"Jesse"},{"n":"2465 W. Kiowa Ave.","s":"APPR Pend Ack","pa":"Sheena Lalunio","d":138,"e":"2026-01-23","dol":"2025-10-14","rcv":0,"sup":"Geoff"},{"n":"445 E. Franklin Ave.","s":"Pending Supp","pa":"Mary Facio Rubio","d":135,"e":"2026-01-26","dol":"2025-10-13","rcv":10450.08,"sup":"Dillon"},{"n":"862 S. Pasadena","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":134,"e":"2026-01-27","dol":"2025-10-13","rcv":0,"sup":"Jae Marayag"},{"n":"3353 N 63rd Ave","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":134,"e":"2026-01-28","dol":"2025-10-13","rcv":524.8,"sup":"Jae Marayag"},{"n":"3186 E. Ames Ave.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":133,"e":"2026-01-28","dol":"2025-08-23","rcv":814.03,"sup":"Isaac"},{"n":"9063 E. Elman Ave.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":133,"e":"2026-01-28","dol":"2025-10-13","rcv":0,"sup":"Jae Marayag"},{"n":"9528 East Minton St","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":133,"e":"2026-01-28","dol":"2025-10-13","rcv":1545.96,"sup":"Dillon"},{"n":"658 E. 8th Ave.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":131,"e":"2026-01-30","dol":"2025-10-13","rcv":0,"sup":"Geoff"},{"n":"815 W. Meseto Ave.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":131,"e":"2026-01-30","dol":"2025-10-13","rcv":2576.09,"sup":"Isaac"},{"n":"2212 E. Honeysuckle St.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":131,"e":"2026-01-30","dol":"2024-08-21","rcv":17123.82,"sup":"Jae Marayag"},{"n":"543 S. 99th St.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":128,"e":"2026-02-02","dol":"2025-10-13","rcv":0,"sup":"Jae Marayag"},{"n":"2531 W. Olla Circle","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":128,"e":"2026-02-02","dol":"2025-09-26","rcv":0,"sup":"Geoff"},{"n":"744 S. Hill","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":125,"e":"2026-02-05","dol":"2024-07-24","rcv":12515.96,"sup":"Jae Marayag"},{"n":"1821 E. Indigo St.","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":125,"e":"2026-02-05","dol":"2025-10-13","rcv":799.17,"sup":"Jae Marayag"},{"n":"212 Redstone St.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":121,"e":"2026-02-09","dol":"2026-01-08","rcv":16926.24,"sup":"Jae Marayag"},{"n":"3702 W. Thomas Rd.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":120,"e":"2026-02-10","dol":"2025-10-16","rcv":1092.93,"sup":"Chris Dockendorff"},{"n":"4517 El Cebra Way","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":120,"e":"2026-02-10","dol":"2026-02-08","rcv":1376.14,"sup":"Geoff"},{"n":"4477 Macmillan Rd.","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":120,"e":"2026-02-11","dol":"2026-01-08","rcv":0,"sup":"Chris Dockendorff"},{"n":"2638 Georgia Ave","s":"APPR Pend Est","pa":"Emmanuel Reblora","d":119,"e":"2026-02-12","dol":"2025-08-01","rcv":10645.53,"sup":""},{"n":"4570 E. New York Ave.","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":119,"e":"2026-02-12","dol":"2025-09-26","rcv":2205.88,"sup":"Dillon"},{"n":"3737 E. Pueblo Ave.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":118,"e":"2026-02-12","dol":"2025-10-13","rcv":0,"sup":"Dillon"},{"n":"4690 E. Arizona Ave.","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":117,"e":"2026-02-13","dol":"2025-09-26","rcv":892.41,"sup":"Geoff"},{"n":"141 Fir St.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":114,"e":"2026-02-16","dol":"2026-01-08","rcv":805.84,"sup":"Hazelene"},{"n":"3860 Ventura Way","s":"APPR Pend Est","pa":"Daniel D\u00e1vila Mora","d":114,"e":"2026-02-16","dol":"2026-01-08","rcv":0,"sup":"Isaac"},{"n":"4357 E. Viking Rd.","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":113,"e":"2026-02-18","dol":"2026-01-08","rcv":16400.21,"sup":"Dillon"},{"n":"507 S. Spur","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":113,"e":"2026-02-18","dol":"2025-10-13","rcv":935.22,"sup":"Dillon"},{"n":"3924 El Paso Rd.","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":111,"e":"2026-02-19","dol":"2025-09-26","rcv":0,"sup":"Chris Dockendorff"},{"n":"1910 N. 41st Ln.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":111,"e":"2026-02-19","dol":"2025-08-25","rcv":2982.4,"sup":"Hazelene"},{"n":"26 E. Susana St.","s":"Pending Supp","pa":"Raphael Rivera","d":110,"e":"2026-02-20","dol":"2021-05-10","rcv":3966.04,"sup":"Dillon"},{"n":"4141 W. Monterey Way","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":110,"e":"2026-02-20","dol":"2025-10-13","rcv":792.56,"sup":"Dillon"},{"n":"817 E. Fairfield St.","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":110,"e":"2026-02-20","dol":"2025-09-26","rcv":676.62,"sup":"Jae Marayag"},{"n":"1384 E. Lynda Ln.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":107,"e":"2026-02-23","dol":"2025-03-05","rcv":0,"sup":"Geoff"},{"n":"4679 Marnell Dr.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":107,"e":"2026-02-24","dol":"2025-09-26","rcv":0,"sup":"Chris Dockendorff"},{"n":"4175 E. Wyoming Ave.","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":107,"e":"2026-02-24","dol":"2026-01-08","rcv":0,"sup":"Jae Marayag"},{"n":"3802 W Catalina Dr","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":106,"e":"2026-02-24","dol":"2025-10-13","rcv":0,"sup":"Geoff"},{"n":"2458 E. Impala Ave.","s":"Pending Supp","pa":"David Delgado Lopez","d":105,"e":"2026-02-26","dol":"2025-03-13","rcv":0,"sup":"Hazelene"},{"n":"5648 W. Granada Rd.","s":"Pending Supp","pa":"Sheena Lalunio","d":105,"e":"2026-02-26","dol":"2025-10-13","rcv":0,"sup":"Isaac"},{"n":"7959 W. Heatherbrae Dr.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":105,"e":"2026-02-26","dol":"2025-11-19","rcv":0,"sup":"Geoff"},{"n":"1729 Amboy Dr.","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":105,"e":"2026-02-26","dol":"2026-02-17","rcv":869.03,"sup":"Dillon"},{"n":"4678 San Benito St..","s":"APPR Pend Est","pa":"Raphael Rivera","d":104,"e":"2026-02-26","dol":"2026-02-17","rcv":0,"sup":"Jesse"},{"n":"2113 Madeline Dr.","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":104,"e":"2026-02-26","dol":"2025-09-26","rcv":0,"sup":"Geoff"},{"n":"701 Elm St. Space 101","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":100,"e":"2026-03-02","dol":"2026-01-08","rcv":1310.15,"sup":"Jesse"},{"n":"4081 Meadow Grove Ave.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":100,"e":"2026-03-02","dol":"2026-01-08","rcv":16234.73,"sup":"Jae Marayag"},{"n":"1108 N. 27th Ln.","s":"APPR Pend Est","pa":"Mary Facio Rubio","d":97,"e":"2026-03-05","dol":"2025-09-26","rcv":15682.69,"sup":"Jesse"},{"n":"3632 W. La Salle St.","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":97,"e":"2026-03-05","dol":"2025-10-13","rcv":0,"sup":"Geoff"},{"n":"4511 N. 50th Ave.","s":"Pending Supp","pa":"Daniel D\u00e1vila Mora","d":97,"e":"2026-03-05","dol":"2025-03-13","rcv":0,"sup":"Geoff"},{"n":"511 Copper Hill Ln.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":97,"e":"2026-03-05","dol":"2024-08-18","rcv":0,"sup":"Hazelene"},{"n":"6700 Kittery Dr.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":97,"e":"2026-03-06","dol":"2026-02-17","rcv":18961.64,"sup":"Dillon"},{"n":"3325 Osage Ave.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":93,"e":"2026-03-10","dol":"2026-01-08","rcv":9385.33,"sup":"Geoff"},{"n":"2829 Sultana St.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":92,"e":"2026-03-10","dol":"2026-02-17","rcv":16449.48,"sup":"Geoff"},{"n":"4311 Salamanca Cir.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":92,"e":"2026-03-10","dol":"2026-01-08","rcv":14753.55,"sup":"Chris Dockendorff"},{"n":"1812 Griffith Ave.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":92,"e":"2026-03-11","dol":"2026-02-17","rcv":18069.81,"sup":"Geoff"},{"n":"914 Stonehenge St.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":90,"e":"2026-03-12","dol":"2026-01-08","rcv":15877.63,"sup":"Geoff"},{"n":"1497 Arden St.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":89,"e":"2026-03-13","dol":"2026-01-08","rcv":916.54,"sup":"Geoff"},{"n":"695 Redeye Ln.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":87,"e":"2026-03-16","dol":"2026-01-08","rcv":15549.96,"sup":"Isaac"},{"n":"31573 N. Mesquite Way","s":"Pending Supp","pa":"Sheena Lalunio","d":86,"e":"2026-03-16","dol":"2025-09-27","rcv":1533.08,"sup":"Isaac"},{"n":"17852 N.17th Pl. Lot 50","s":"Pending Supp","pa":"Emmanuel Reblora","d":86,"e":"2026-03-16","dol":"2025-11-19","rcv":711.86,"sup":"Isaac"},{"n":"677 N. Sunland Dr.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":86,"e":"2026-03-16","dol":"2025-10-13","rcv":29337.28,"sup":"Jae Marayag"},{"n":"5073 Haystack Dr.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":85,"e":"2026-03-17","dol":"2026-01-08","rcv":0,"sup":"Geoff"},{"n":"9859 N Balboa Dr.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":84,"e":"2026-03-19","dol":"2025-09-26","rcv":3228.68,"sup":"Geoff"},{"n":"5121 E. Keresan St.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":83,"e":"2026-03-19","dol":"2025-10-13","rcv":0,"sup":"Geoff"},{"n":"2926 W. Pierson St.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":79,"e":"2026-03-23","dol":"2025-09-26","rcv":9899.66,"sup":"Geoff"},{"n":"4408 Mark Ave.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":79,"e":"2026-03-24","dol":"2026-02-17","rcv":3696.91,"sup":"Hazelene"},{"n":"7034 W. Medlock Dr.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":77,"e":"2026-03-25","dol":"2025-11-19","rcv":20575.88,"sup":"Geoff"},{"n":"4364 Alderbrook Ct.","s":"Pending Supp","pa":"Emmanuel Reblora","d":77,"e":"2026-03-26","dol":"2025-09-26","rcv":935.99,"sup":"Jae Marayag"},{"n":"2934 N 40th Ave.","s":"Pending Supp","pa":"Emmanuel Reblora","d":76,"e":"2026-03-27","dol":"2025-10-13","rcv":623.82,"sup":"Dillon"},{"n":"2439 E. Contessa St.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":75,"e":"2026-03-27","dol":"2025-09-26","rcv":968.41,"sup":"Chris Dockendorff"},{"n":"10456 S. Avenue 10 1/2 E.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":75,"e":"2026-03-27","dol":"2025-09-04","rcv":0,"sup":"Geoff"},{"n":"7810 West Peoria Ave","s":"Pending Supp","pa":"Daniel D\u00e1vila Mora","d":72,"e":"2026-03-30","dol":"2025-11-19","rcv":0,"sup":"Jae Marayag"},{"n":"2060 White St.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":72,"e":"2026-03-31","dol":"2026-01-08","rcv":969.76,"sup":"Geoff"},{"n":"800 Glendale Ave.","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":72,"e":"2026-03-31","dol":"2026-02-17","rcv":17462.72,"sup":"Dillon"},{"n":"919 W. Carmen St.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":69,"e":"2026-04-03","dol":"2025-10-13","rcv":633.62,"sup":"Geoff"},{"n":"8700 E. University Dr. Lot 1411","s":"Pending Supp","pa":"Emmanuel Reblora","d":65,"e":"2026-04-06","dol":"2025-10-13","rcv":0,"sup":"Isaac"},{"n":"864 Bergamont Dr","s":"Pending Supp","pa":"David Delgado Lopez","d":64,"e":"2026-04-07","dol":"2025-09-26","rcv":1185.88,"sup":"Isaac"},{"n":"2201 Goldhill Way","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":62,"e":"2026-04-09","dol":"2026-03-30","rcv":26378.09,"sup":"Chris Dockendorff"},{"n":"2502 E. Huntington Dr.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":58,"e":"2026-04-14","dol":"2025-10-13","rcv":0,"sup":"Geoff"},{"n":"4517 W. Catalina Drive","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":56,"e":"2026-04-16","dol":"2025-11-19","rcv":2078.47,"sup":"Dillon"},{"n":"8955 W. Stella Ave.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":54,"e":"2026-04-17","dol":"2025-09-26","rcv":0,"sup":"Geoff"},{"n":"4133 Pierce Way","s":"Pending Supp","pa":"Mary Facio Rubio","d":45,"e":"2026-04-27","dol":"2025-11-19","rcv":0,"sup":"Geoff"},{"n":"6330 E. Main St. Ste. 6","s":"Pending Supp","pa":"Daniel D\u00e1vila Mora","d":40,"e":"2026-05-01","dol":"2025-09-26","rcv":0,"sup":"Chris Dockendorff"},{"n":"Test Client 1","s":"Active Supp Negotaitions","pa":"Brandon Webster","d":28,"e":"2026-05-14","dol":"2020-12-02","rcv":0,"sup":"Jesse"},{"n":"5402 S. 4th Ave.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":27,"e":"2026-05-14","dol":"2025-10-17","rcv":615.96,"sup":"Hazelene"},{"n":"4810 W. Hubbell St.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":27,"e":"2026-05-14","dol":"2025-11-19","rcv":1279.57,"sup":"Hazelene"},{"n":"426 Holick Ave.","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":27,"e":"2026-05-14","dol":"2025-09-26","rcv":878.94,"sup":"Hazelene"},{"n":"1923 E. 7th Ave.","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":27,"e":"2026-05-14","dol":"2025-10-13","rcv":0,"sup":"Jae Marayag"},{"n":"1210 Inca Ln.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":27,"e":"2026-05-14","dol":"2025-09-26","rcv":1186.66,"sup":"Dillon"},{"n":"2112 N. Vista Del Sol","s":"APPR Pend Est","pa":"Raphael Rivera","d":27,"e":"2026-05-14","dol":"2025-09-26","rcv":3432.38,"sup":"Isaac"},{"n":"328 E. Gardenia Dr","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":26,"e":"2026-05-15","dol":"2025-10-13","rcv":0,"sup":"Hazelene"},{"n":"5317 Eugene Ave.","s":"Pending Supp","pa":"Raphael Rivera","d":26,"e":"2026-05-15","dol":"2025-11-13","rcv":0,"sup":"Isaac"},{"n":"601 Diamond Dr.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":26,"e":"2026-05-15","dol":"2025-07-01","rcv":0,"sup":"Geoff"},{"n":"4855 Terra Linda Ave.","s":"Pending Supp","pa":"Mary Facio Rubio","d":26,"e":"2026-05-15","dol":"2025-02-14","rcv":0,"sup":"Chris Dockendorff"},{"n":"3229 N. 55th Ave.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":26,"e":"2026-05-15","dol":"2025-09-26","rcv":13847.92,"sup":"Dillon"},{"n":"2017 W. Gardenia Dr.","s":"APPR Pend Est","pa":"Emmanuel Reblora","d":26,"e":"2026-05-15","dol":"2025-09-01","rcv":0,"sup":"Dillon"},{"n":"114 E. Balboa Dr.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":26,"e":"2026-05-15","dol":"2025-10-24","rcv":0,"sup":"Dillon"},{"n":"3646 E. Rousay Dr.","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":26,"e":"2026-05-15","dol":"2026-03-09","rcv":0,"sup":"Dillon"},{"n":"1515 E. Hampton St.","s":"APPR Pend Est","pa":"Sheena Lalunio","d":26,"e":"2026-05-15","dol":"2024-07-14","rcv":0,"sup":"Jesse"},{"n":"710 E. June St.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":26,"e":"2026-05-16","dol":"2025-09-26","rcv":0,"sup":"Dillon"},{"n":"1651 E. Thompson Ave.","s":"APPR Pend Ack","pa":"David Delgado Lopez","d":25,"e":"2026-05-16","dol":"2025-08-23","rcv":151.3,"sup":"Isaac"},{"n":"8834 E. 39th Pl.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":25,"e":"2026-05-16","dol":"2025-09-04","rcv":18457.6,"sup":"Isaac"},{"n":"120 E. Desert Rose Dr.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":24,"e":"2026-05-18","dol":"2025-09-26","rcv":894.61,"sup":"Geoff"},{"n":"2324 E. Alameda Dr.","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":24,"e":"2026-05-18","dol":"2025-10-13","rcv":0,"sup":"Geoff"},{"n":"2709 W. Meseto Cr.","s":"APPR Pend Ack","pa":"Sheena Lalunio","d":23,"e":"2026-05-18","dol":"2025-08-25","rcv":3967.34,"sup":"Geoff"},{"n":"1136 E. 3rd Pl.","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":23,"e":"2026-05-18","dol":"2025-10-23","rcv":0,"sup":"Isaac"},{"n":"1638 N. Pinnule","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":23,"e":"2026-05-18","dol":"2025-09-26","rcv":0,"sup":"Isaac"},{"n":"11250 S. Shoshoni Dr.","s":"APPR Pend Ack","pa":"Mary Facio Rubio","d":23,"e":"2026-05-18","dol":"2025-08-26","rcv":0,"sup":"Dillon"},{"n":"871 Stonehenge St.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":23,"e":"2026-05-18","dol":"2026-01-08","rcv":862.38,"sup":"Isaac"},{"n":"4195 N. Benton St.","s":"APPR Pend Est","pa":"Mary Facio Rubio","d":23,"e":"2026-05-18","dol":"2025-08-23","rcv":0,"sup":"Jesse"},{"n":"3225 Saint Andrews Dr.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":23,"e":"2026-05-19","dol":"2024-07-15","rcv":0,"sup":"Geoff"},{"n":"159 E. Garnet Ave.","s":"Pending Supp","pa":"Sheena Lalunio","d":23,"e":"2026-05-19","dol":"2025-06-09","rcv":0,"sup":"Dillon"},{"n":"4716 N 31st Drive","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":22,"e":"2026-05-19","dol":"2025-09-13","rcv":6392.86,"sup":"Jae Marayag"},{"n":"180 E. Laval Dr.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":22,"e":"2026-05-19","dol":"2025-09-26","rcv":0,"sup":"Hazelene"},{"n":"3020 N 61st Ave.","s":"APPR Pend Est","pa":"Daniel D\u00e1vila Mora","d":22,"e":"2026-05-19","dol":"2025-10-13","rcv":697.45,"sup":"Isaac"},{"n":"1519 E. Helena Dr.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":22,"e":"2026-05-19","dol":"2025-11-19","rcv":20222.75,"sup":"Hazelene"},{"n":"8545 E. 38th Pl.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":22,"e":"2026-05-19","dol":"2025-09-04","rcv":572.32,"sup":"Isaac"},{"n":"2121 N. Center St. Lot 12","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":22,"e":"2026-05-19","dol":"2025-09-26","rcv":0,"sup":"Dillon"},{"n":"2157 E. Iverness Avenue","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":22,"e":"2026-05-19","dol":"2025-10-13","rcv":10619.25,"sup":"Hazelene"},{"n":"6937 Cortez Ct.","s":"APPR Pend Est","pa":"Mary Facio Rubio","d":22,"e":"2026-05-19","dol":"2025-06-05","rcv":0,"sup":"Geoff"},{"n":"701 N. 17th St.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":22,"e":"2026-05-19","dol":"2026-01-08","rcv":17489.09,"sup":"Hazelene"},{"n":"637 W Pantera Ave","s":"APPR Pend Est","pa":"Sheena Lalunio","d":22,"e":"2026-05-19","dol":"2024-08-22","rcv":0,"sup":"Dillon"},{"n":"237 Cervantes St.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":22,"e":"2026-05-20","dol":"2026-02-17","rcv":0,"sup":"Geoff"},{"n":"4213 Garden Pl","s":"APPR Pend Ack","pa":"Daniel D\u00e1vila Mora","d":22,"e":"2026-05-20","dol":"2025-09-26","rcv":2456.96,"sup":"Dillon"},{"n":"8544 E. 38th Pl.","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":22,"e":"2026-05-20","dol":"2024-08-07","rcv":0,"sup":"Geoff"},{"n":"4621 Lilliput Ln","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":22,"e":"2026-05-20","dol":"2026-01-08","rcv":1045.75,"sup":"Isaac"},{"n":"3128 W. Cypress St.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":22,"e":"2026-05-20","dol":"2025-03-11","rcv":0,"sup":"Jae Marayag"},{"n":"1927 Peyton Dr.","s":"APPR Pend Est","pa":"Raphael Rivera","d":21,"e":"2026-05-20","dol":"2025-03-13","rcv":6368.9,"sup":"Isaac"},{"n":"5904 Paseo Montana","s":"APPR Pend Est","pa":"Emmanuel Reblora","d":21,"e":"2026-05-20","dol":"2026-01-08","rcv":1508.72,"sup":"Jesse"},{"n":"365 W. Taylor Dr.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":21,"e":"2026-05-20","dol":"2025-07-13","rcv":0,"sup":"Isaac"},{"n":"3255 N. Campbell Ave.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":21,"e":"2026-05-20","dol":"2024-07-11","rcv":0,"sup":"Geoff"},{"n":"4013 Snead Dr.","s":"APPR Pend Est","pa":"David Delgado Lopez","d":21,"e":"2026-05-20","dol":"2025-09-26","rcv":0,"sup":"Isaac"},{"n":"79 Church St.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":21,"e":"2026-05-20","dol":"2025-09-26","rcv":9427.44,"sup":"Jae Marayag"},{"n":"4144 E. Nancy Ln.","s":"APPR Pend Ack","pa":"Daniel D\u00e1vila Mora","d":21,"e":"2026-05-20","dol":"2025-08-25","rcv":5995.89,"sup":"Jae Marayag"},{"n":"5252 New Bedford Cir.","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":21,"e":"2026-05-20","dol":"2025-09-26","rcv":2166.96,"sup":"Dillon"},{"n":"609 Diamond Dr.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":21,"e":"2026-05-20","dol":"2025-05-06","rcv":4110.81,"sup":"Isaac"},{"n":"1728 E. St. Louis Ave.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":21,"e":"2026-05-20","dol":"2025-09-26","rcv":0,"sup":"Isaac"},{"n":"1328 Spague St.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":21,"e":"2026-05-20","dol":"2026-02-17","rcv":17598.74,"sup":"Isaac"},{"n":"602 Evergreen St.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":21,"e":"2026-05-20","dol":"2025-09-26","rcv":15674.25,"sup":"Chris Dockendorff"},{"n":"8131 E. Peralta Ave.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":21,"e":"2026-05-20","dol":"2025-10-13","rcv":2043.65,"sup":"Isaac"},{"n":"1613 Crest Haven Ave.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":21,"e":"2026-05-20","dol":"2025-09-26","rcv":1830.15,"sup":"Isaac"},{"n":"4441 Sunrise Ave.","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":21,"e":"2026-05-20","dol":"2026-02-17","rcv":0,"sup":"Dillon"},{"n":"459 N. Sycamore","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":21,"e":"2026-05-20","dol":"2025-09-26","rcv":0,"sup":"Isaac"},{"n":"5709 N. 68th Ave.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":21,"e":"2026-05-20","dol":"2025-10-13","rcv":9413.61,"sup":"Dillon"},{"n":"4849 E 12thSt","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":21,"e":"2026-05-20","dol":"2025-07-03","rcv":0,"sup":"Isaac"},{"n":"10071 E. Arizona Sunset Dr.","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":21,"e":"2026-05-20","dol":"2025-09-26","rcv":0,"sup":"Isaac"},{"n":"4340 Fox Point Dr.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":21,"e":"2026-05-20","dol":"2026-01-08","rcv":19322.24,"sup":"Isaac"},{"n":"7116 W. Wilshire Dr.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":21,"e":"2026-05-20","dol":"2025-09-26","rcv":0,"sup":"Chris Dockendorff"},{"n":"751 Palo Verde Dr.","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":21,"e":"2026-05-20","dol":"2025-07-17","rcv":0,"sup":"Isaac"},{"n":"3725 W. Marguerite Ave.","s":"Pending Supp","pa":"Daniel D\u00e1vila Mora","d":21,"e":"2026-05-21","dol":"2025-08-26","rcv":0,"sup":"Jae Marayag"},{"n":"606 N. Blue Spruce Rd.","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":21,"e":"2026-05-21","dol":"2025-08-12","rcv":0,"sup":"Dillon"},{"n":"5008 W. Edgemont Ave.","s":"APPR Pend Est","pa":"Sheena Lalunio","d":20,"e":"2026-05-21","dol":"2025-11-19","rcv":800,"sup":"Jesse"},{"n":"4110 Manford Dr.","s":"APPR Pend Est","pa":"David Delgado Lopez","d":20,"e":"2026-05-21","dol":"2025-09-26","rcv":10161.92,"sup":"Jesse"},{"n":"6525 S. 15th Dr.","s":"APPR Pend Est","pa":"Sheena Lalunio","d":20,"e":"2026-05-21","dol":"2024-07-24","rcv":0,"sup":"Jesse"},{"n":"5176 San Anselmo St.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":20,"e":"2026-05-21","dol":"2025-09-26","rcv":19648.58,"sup":"Isaac"},{"n":"2302 E. Commonwealth Ave.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":20,"e":"2026-05-21","dol":"2025-10-13","rcv":0,"sup":"Dillon"},{"n":"4339 N. 23rd Ave.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":20,"e":"2026-05-22","dol":"2025-09-26","rcv":8421.39,"sup":"Isaac"},{"n":"210 Navajo Dr.","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":19,"e":"2026-05-22","dol":"2025-09-26","rcv":9483.75,"sup":"Hazelene"},{"n":"2164 W. Catalina Ave.","s":"APPR Pend Ack","pa":"David Delgado Lopez","d":19,"e":"2026-05-22","dol":"2025-08-25","rcv":693.03,"sup":"Dillon"},{"n":"608 E. Fairway Rd.","s":"Pending Supp","pa":"David Delgado Lopez","d":19,"e":"2026-05-22","dol":"2025-11-19","rcv":1036.94,"sup":"Dillon"},{"n":"6745 W San Miguel Ave","s":"APPR Pend Ack","pa":"Emmanuel Reblora","d":19,"e":"2026-05-22","dol":"2025-11-19","rcv":0,"sup":"Isaac"},{"n":"2601 San Gorgonio St.","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":17,"e":"2026-05-24","dol":"2025-09-26","rcv":0,"sup":"Geoff"},{"n":"8026 E. Indianola Ave.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":17,"e":"2026-05-25","dol":"2025-09-26","rcv":13555.29,"sup":"Geoff"},{"n":"2384 W. Le Marche Ave.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":17,"e":"2026-05-25","dol":"2025-10-13","rcv":0,"sup":"Geoff"},{"n":"419 E. Crescent Ave.","s":"Pending Supp","pa":"Daniel D\u00e1vila Mora","d":17,"e":"2026-05-25","dol":"2025-08-25","rcv":0,"sup":"Dillon"},{"n":"201 E. Desert Rose Dr.","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":16,"e":"2026-05-25","dol":"2025-11-19","rcv":0,"sup":"Hazelene"},{"n":"4001 W. San Juan Ave.","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":16,"e":"2026-05-25","dol":"2025-08-25","rcv":0,"sup":"Hazelene"},{"n":"2094 N Moonlite Dr.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":16,"e":"2026-05-25","dol":"2025-09-26","rcv":23739.04,"sup":"Hazelene"},{"n":"3935 Chinchilla Ave.","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":16,"e":"2026-05-25","dol":"2026-02-17","rcv":838.37,"sup":"Hazelene"},{"n":"1201 E. Greenway Cir.","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":16,"e":"2026-05-26","dol":"2025-09-26","rcv":0,"sup":"Geoff"},{"n":"701 Elm St. Space 116","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":16,"e":"2026-05-26","dol":"2026-01-08","rcv":858.88,"sup":"Geoff"},{"n":"2619 N. 71st Dr.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":15,"e":"2026-05-26","dol":"2025-08-21","rcv":11825.93,"sup":"Jae Marayag"},{"n":"7308 W Roma Ave.","s":"APPR Pend Est","pa":"David Delgado Lopez","d":15,"e":"2026-05-26","dol":"2025-09-26","rcv":0,"sup":"Geoff"},{"n":"2020 S. Magic Way Lot 9","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":15,"e":"2026-05-26","dol":"2025-05-06","rcv":0,"sup":"Isaac"},{"n":"1122 N. 14th St.","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":15,"e":"2026-05-26","dol":"2025-08-22","rcv":0,"sup":"Isaac"},{"n":"1118 W. Monte Ave.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":15,"e":"2026-05-26","dol":"2025-09-26","rcv":0,"sup":"Dillon"},{"n":"7300 N 51st Lot A276","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":15,"e":"2026-05-27","dol":"2025-10-13","rcv":0,"sup":"Geoff"},{"n":"2721 W. Greenway Rd. Lot 94","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":14,"e":"2026-05-27","dol":"2025-11-19","rcv":0,"sup":"Chris Dockendorff"},{"n":"645 National St.","s":"Pending Supp","pa":"David Delgado Lopez","d":14,"e":"2026-05-27","dol":"2025-09-26","rcv":858.51,"sup":"Isaac"},{"n":"1160 N. Wilmot Rd.","s":"Pending Supp","pa":"Mary Facio Rubio","d":14,"e":"2026-05-27","dol":"2023-07-17","rcv":0,"sup":"Dillon"},{"n":"3585 N. Skylark Rd.","s":"APPR Pend Ack","pa":"Mary Facio Rubio","d":14,"e":"2026-05-27","dol":"2025-08-23","rcv":1163.18,"sup":"Dillon"},{"n":"4115 N. Pinal St.","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":14,"e":"2026-05-27","dol":"2025-08-01","rcv":1183.03,"sup":"Geoff"},{"n":"5608 W. Berkeley Rd.","s":"APPR Pend Est","pa":"David Delgado Lopez","d":14,"e":"2026-05-27","dol":"2025-11-19","rcv":670.41,"sup":"Dillon"},{"n":"1746 E. Garnet Ave.","s":"APPR Send Demand","pa":"Sheena Lalunio","d":14,"e":"2026-05-27","dol":"2025-08-25","rcv":1722.25,"sup":"Hazelene"},{"n":"5379 Sawyer Ave","s":"APPR Send Demand","pa":"David Delgado Lopez","d":14,"e":"2026-05-28","dol":"2024-03-02","rcv":3347.42,"sup":"Isaac"},{"n":"662 E Millett Ave","s":"Pending Supp","pa":"Raphael Rivera","d":13,"e":"2026-05-28","dol":"2025-10-13","rcv":636.58,"sup":"Isaac"},{"n":"1115 Pawnee Ln.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":13,"e":"2026-05-28","dol":"2025-09-26","rcv":0,"sup":"Jae Marayag"},{"n":"223 Denver Way","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":13,"e":"2026-05-28","dol":"2025-07-01","rcv":12587.9,"sup":"Dillon"},{"n":"2126 N Spring","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":13,"e":"2026-05-28","dol":"2025-09-26","rcv":0,"sup":"Dillon"},{"n":"1802 E. Campo Dr. Lot 70","s":"Pending Supp","pa":"Raphael Rivera","d":13,"e":"2026-05-29","dol":"2025-10-13","rcv":0,"sup":"Dillon"},{"n":"3726 N. Fremont Ave.","s":"Pending Supp","pa":"Daniel D\u00e1vila Mora","d":13,"e":"2026-05-29","dol":"2025-09-26","rcv":5569.92,"sup":"Chris Dockendorff"},{"n":"1288 Shenandoah Street","s":"Pending Supp","pa":"Daniel D\u00e1vila Mora","d":13,"e":"2026-05-29","dol":"2026-04-17","rcv":0,"sup":"Dillon"},{"n":"2050 S. Magic Way Lot 161","s":"Pending Supp","pa":"Raphael Rivera","d":13,"e":"2026-05-29","dol":"2025-08-25","rcv":0,"sup":"Isaac"},{"n":"8500 N. Cracker Barrel Rd.","s":"Pending Supp","pa":"David Delgado Lopez","d":13,"e":"2026-05-29","dol":"2024-07-14","rcv":0,"sup":"Chris Dockendorff"},{"n":"4432 El Cebra Way.","s":"Pending Supp","pa":"Raphael Rivera","d":13,"e":"2026-05-29","dol":"2025-09-26","rcv":0,"sup":"Isaac"},{"n":"1314 S. Maryland Pkwy.","s":"Pending Supp","pa":"Raphael Rivera","d":13,"e":"2026-05-29","dol":"2025-05-17","rcv":0,"sup":"Isaac"},{"n":"438 Holick Ave.","s":"APPR Pend Est","pa":"Sheena Lalunio","d":12,"e":"2026-05-29","dol":"2025-09-26","rcv":0,"sup":"Isaac"},{"n":"5730 S. Beck Ave.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":12,"e":"2026-05-29","dol":"2025-10-13","rcv":0,"sup":"Dillon"},{"n":"1293 Red Mountain Ct.","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":12,"e":"2026-05-29","dol":"2026-01-08","rcv":896.19,"sup":"Gerald Banaag"},{"n":"3945 Belhaven St.","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":12,"e":"2026-05-29","dol":"2025-09-26","rcv":9855.85,"sup":"Dillon"},{"n":"4005 Foxgrove Dr.","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":12,"e":"2026-05-29","dol":"2025-09-26","rcv":17831.79,"sup":"Hazelene"},{"n":"5409 Banjo St.","s":"APPR Pend Ack","pa":"Mary Facio Rubio","d":12,"e":"2026-05-29","dol":"2026-01-08","rcv":0,"sup":"Isaac"},{"n":"1933 E. Duke Dr.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":12,"e":"2026-05-29","dol":"2025-10-13","rcv":0,"sup":"Isaac"},{"n":"1841 W. Arroyo Vista Dr.","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":12,"e":"2026-05-29","dol":"2025-07-02","rcv":0,"sup":"Dillon"},{"n":"1501 E. Fillmore St.","s":"APPR Pend Est","pa":"Daniel D\u00e1vila Mora","d":12,"e":"2026-05-29","dol":"2025-10-13","rcv":0,"sup":"Isaac"},{"n":"4558 Newton Dr.","s":"APPR Pend Est","pa":"David Delgado Lopez","d":12,"e":"2026-05-29","dol":"2026-02-08","rcv":448.57,"sup":"Isaac"},{"n":"3950 W Virginia Ave.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":12,"e":"2026-05-29","dol":"2025-09-26","rcv":0,"sup":"Dillon"},{"n":"1630 E. Suffolk Ave.","s":"APPR Pend Est","pa":"Mary Facio Rubio","d":12,"e":"2026-05-30","dol":"2025-08-01","rcv":0,"sup":"Geoff"},{"n":"1661 S. Roca","s":"APPR Send Demand","pa":"Raphael Rivera","d":12,"e":"2026-05-30","dol":"2025-09-27","rcv":1888.33,"sup":"Hazelene"},{"n":"8624 W Osborn Rn","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":12,"e":"2026-05-30","dol":"2025-11-19","rcv":0,"sup":"Geoff"},{"n":"636 N. Miller St.","s":"APPR Pend Est","pa":"Mary Facio Rubio","d":12,"e":"2026-05-30","dol":"2025-09-26","rcv":20098.54,"sup":"Jesse"},{"n":"2829 N. 50th Ave.","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":11,"e":"2026-05-31","dol":"2025-11-19","rcv":1184.17,"sup":"Jesse"},{"n":"810 Spikenard","s":"APPR Pend Ack","pa":"Raphael Rivera","d":10,"e":"2026-05-31","dol":"2025-09-26","rcv":1628.94,"sup":"Isaac"},{"n":"118 Minor Ave.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":10,"e":"2026-05-31","dol":"2025-07-01","rcv":861.79,"sup":"Geoff"},{"n":"4230 E. Mesquite Desert Trl.","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":10,"e":"2026-06-01","dol":"2025-08-21","rcv":0,"sup":"Geoff"},{"n":"3807 Prosperity Ln.","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":10,"e":"2026-06-01","dol":"2025-07-01","rcv":0,"sup":"Geoff"},{"n":"413 E. Marco Polo Rd.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":9,"e":"2026-06-01","dol":"2025-08-15","rcv":964.67,"sup":"Hazelene"},{"n":"684 W. Linda Ln.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":9,"e":"2026-06-01","dol":"2025-10-13","rcv":0,"sup":"Hazelene"},{"n":"4458 E. Viking Rd.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":9,"e":"2026-06-01","dol":"2025-07-01","rcv":0,"sup":"Dillon"},{"n":"5143 Woodruff Pl.","s":"APPR Pend Est","pa":"Mary Facio Rubio","d":9,"e":"2026-06-01","dol":"2026-02-17","rcv":913.09,"sup":"Hazelene"},{"n":"1885 S 10th Ave","s":"APPR Pend Ack","pa":"Sheena Lalunio","d":8,"e":"2026-06-02","dol":"2025-09-04","rcv":0,"sup":"Hazelene"},{"n":"423 E. Carson Dr.","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":8,"e":"2026-06-02","dol":"2025-10-24","rcv":0,"sup":"Chris Dockendorff"},{"n":"3618 W. Portland St.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":8,"e":"2026-06-02","dol":"2025-10-13","rcv":2506.99,"sup":"Isaac"},{"n":"4527 El Carnal Way","s":"APPR Pend Ack","pa":"David Delgado Lopez","d":8,"e":"2026-06-02","dol":"2026-01-08","rcv":828.48,"sup":"Dillon"},{"n":"5251 New Bedford Circle","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":8,"e":"2026-06-03","dol":"2025-09-26","rcv":0,"sup":"Gerald Banaag"},{"n":"712 W. Portland St.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":8,"e":"2026-06-03","dol":"2025-10-13","rcv":8837.15,"sup":"Hazelene"},{"n":"4955 Elaina Ave.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":7,"e":"2026-06-03","dol":"2026-01-08","rcv":13291.34,"sup":"Hazelene"},{"n":"819 E. 10th Dr.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":7,"e":"2026-06-03","dol":"2025-10-13","rcv":0,"sup":"Hazelene"},{"n":"911 N. Baker","s":"APPR Send Demand","pa":"David Delgado Lopez","d":7,"e":"2026-06-03","dol":"2025-09-26","rcv":895.3,"sup":"Chris Dockendorff"},{"n":"3860 Oakleaf Ave.","s":"Pending Supp","pa":"Sheena Lalunio","d":7,"e":"2026-06-03","dol":"2025-07-02","rcv":0,"sup":"Hazelene"},{"n":"1849 Beesley Dr.","s":"Pending Supp","pa":"Sheena Lalunio","d":7,"e":"2026-06-03","dol":"2025-09-26","rcv":0,"sup":"Chris Dockendorff"},{"n":"680 E. Beverly Ave.","s":"Pending Supp","pa":"David Delgado Lopez","d":7,"e":"2026-06-03","dol":"2025-08-01","rcv":2738.14,"sup":"Isaac"},{"n":"2953 E. Dolphin Ave.","s":"APPR Send Demand","pa":"Mary Facio Rubio","d":7,"e":"2026-06-03","dol":"2025-10-13","rcv":705.88,"sup":"Dillon"},{"n":"3435 W. Sweetwater Ave.","s":"APPR Pend Ack","pa":"Mary Facio Rubio","d":7,"e":"2026-06-04","dol":"2025-11-19","rcv":0,"sup":"Isaac"},{"n":"6417 W Sells Drive","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":6,"e":"2026-06-04","dol":"2025-10-13","rcv":808.09,"sup":"Hazelene"},{"n":"3141 Fallwood St.","s":"Pending Supp","pa":"Mary Facio Rubio","d":6,"e":"2026-06-04","dol":"2026-05-17","rcv":861.8,"sup":"Isaac"},{"n":"5098 Maple Tree Ave.","s":"Pending Supp","pa":"Sheena Lalunio","d":6,"e":"2026-06-04","dol":"2025-09-26","rcv":0,"sup":"Isaac"},{"n":"5791 E. Flowing Spring","s":"Pending Supp","pa":"Mary Facio Rubio","d":6,"e":"2026-06-04","dol":"2025-09-01","rcv":960.32,"sup":"Isaac"},{"n":"1634 W. Wahalla Ln.","s":"Pending Supp","pa":"Raphael Rivera","d":6,"e":"2026-06-04","dol":"2025-08-25","rcv":653.27,"sup":"Isaac"},{"n":"4001 W. San Miguel Ave.","s":"Pending Supp","pa":"Sheena Lalunio","d":6,"e":"2026-06-04","dol":"2025-08-25","rcv":18691.19,"sup":"Isaac"},{"n":"2340 E. University Dr. Lot 6","s":"Pending Supp","pa":"Raphael Rivera","d":6,"e":"2026-06-04","dol":"2025-10-13","rcv":0,"sup":"Chris Dockendorff"},{"n":"4089 Deerfield Ave.","s":"Pending Supp","pa":"Daniel D\u00e1vila Mora","d":6,"e":"2026-06-04","dol":"2025-09-26","rcv":15688.05,"sup":"Isaac"},{"n":"520 S Hunt Dr.","s":"Pending Supp","pa":"Emmanuel Reblora","d":6,"e":"2026-06-04","dol":"2025-10-13","rcv":1248.87,"sup":"Isaac"},{"n":"728 E. Chilton Dr.","s":"Pending Supp","pa":"David Delgado Lopez","d":6,"e":"2026-06-04","dol":"2025-10-13","rcv":821.44,"sup":"Isaac"},{"n":"443 S. Ridge","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":6,"e":"2026-06-04","dol":"2025-09-26","rcv":0,"sup":"Chris Dockendorff"},{"n":"4029 N. 79th Dr.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":6,"e":"2026-06-04","dol":"2025-10-13","rcv":0,"sup":"Jae Marayag"},{"n":"4502 E. 16th St.","s":"Pending Supp","pa":"Raphael Rivera","d":6,"e":"2026-06-04","dol":"2024-08-08","rcv":0,"sup":"Isaac"},{"n":"8150 W. Verde Ln.","s":"APPR Pend Ack","pa":"David Delgado Lopez","d":6,"e":"2026-06-04","dol":"2025-11-19","rcv":424.51,"sup":"Hazelene"},{"n":"5071 Arvada Way","s":"APPR Pend Est","pa":"Emmanuel Reblora","d":6,"e":"2026-06-04","dol":"2025-09-26","rcv":0,"sup":"Geoff"},{"n":"1299 E. Fry Blvd.","s":"APPR Send Demand","pa":"Raphael Rivera","d":6,"e":"2026-06-04","dol":"2025-07-14","rcv":770.8,"sup":"Dillon"},{"n":"200 Bruin Way","s":"APPR Pend Est","pa":"Daniel D\u00e1vila Mora","d":6,"e":"2026-06-04","dol":"2025-09-26","rcv":1511.36,"sup":"Jesse"},{"n":"6956 Pinebrook Ct.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":6,"e":"2026-06-04","dol":"2025-07-01","rcv":21606.22,"sup":"Hazelene"},{"n":"827 N. 59th Dr.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":6,"e":"2026-06-04","dol":"2025-10-13","rcv":15705.05,"sup":"Hazelene"},{"n":"2437 E. Irwin Cir.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":6,"e":"2026-06-04","dol":"2025-09-29","rcv":0,"sup":"Dillon"},{"n":"5543 Waltham Ln.","s":"APPR Pend Ack","pa":"David Delgado Lopez","d":6,"e":"2026-06-05","dol":"2025-09-26","rcv":926.79,"sup":"Geoff"},{"n":"1065 E 7th Place","s":"APPR Pend Est","pa":"David Delgado Lopez","d":5,"e":"2026-06-05","dol":"2025-08-25","rcv":9159.96,"sup":"Isaac"},{"n":"810 N. Los Alamos Dr.","s":"Pending Supp","pa":"Mary Facio Rubio","d":5,"e":"2026-06-05","dol":"2025-10-11","rcv":1324.19,"sup":"Chris Dockendorff"},{"n":"3623 W. Carla Vista Dr.","s":"Pending Supp","pa":"Emmanuel Reblora","d":5,"e":"2026-06-05","dol":"2025-10-13","rcv":0,"sup":"Isaac"},{"n":"4032 W. Coronado Rd.","s":"Pending Supp","pa":"Emmanuel Reblora","d":5,"e":"2026-06-05","dol":"2025-09-04","rcv":0,"sup":""},{"n":"1715 W. Apache St.","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":5,"e":"2026-06-05","dol":"2025-11-18","rcv":0,"sup":"Dillon"},{"n":"7602 W Cheery Lynn Rd.","s":"APPR Pend Ack","pa":"Daniel D\u00e1vila Mora","d":5,"e":"2026-06-05","dol":"2025-10-13","rcv":0,"sup":"Geoff"},{"n":"130 Potter Pl.","s":"Pending Supp","pa":"Mary Facio Rubio","d":5,"e":"2026-06-05","dol":"2025-07-02","rcv":0,"sup":"Hazelene"},{"n":"1361 E. Saint Catherine Ave.","s":"APPR Pend Ack","pa":"Raphael Rivera","d":5,"e":"2026-06-05","dol":"2025-09-26","rcv":0,"sup":"Geoff"},{"n":"4323 Chirr Ln.","s":"Review 1st EST","pa":"Daniel D\u00e1vila Mora","d":5,"e":"2026-06-05","dol":"2026-01-08","rcv":1894.88,"sup":"Hazelene"},{"n":"602 Canyon Rd.","s":"Active Supp Negotaitions","pa":"Sheena Lalunio","d":5,"e":"2026-06-05","dol":"2025-11-19","rcv":0,"sup":"Dillon"},{"n":"2838 E. Downing Cir.","s":"APPR Pend Est","pa":"Daniel D\u00e1vila Mora","d":5,"e":"2026-06-05","dol":"2025-10-13","rcv":0,"sup":"Jesse"},{"n":"138 Grove St.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":3,"e":"2026-06-08","dol":"2025-07-01","rcv":0,"sup":"Geoff"},{"n":"30534 N Appalachian Trl,","s":"Review 1st EST","pa":"Mary Facio Rubio","d":3,"e":"2026-06-08","dol":"2025-09-26","rcv":11007.58,"sup":""},{"n":"3101 N. 26th St.","s":"Review 1st EST","pa":"Mary Facio Rubio","d":3,"e":"2026-06-08","dol":"2025-10-13","rcv":0,"sup":""},{"n":"1603 Mayfair Pl.","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":3,"e":"2026-06-08","dol":"2025-10-17","rcv":2565.97,"sup":"Geoff"},{"n":"24543 N. Saguaro Way","s":"Active Supp Negotaitions","pa":"Raphael Rivera","d":3,"e":"2026-06-08","dol":"2025-09-01","rcv":1060.41,"sup":"Geoff"},{"n":"4610 Lancer way","s":"APPR Pend Ack","pa":"Daniel D\u00e1vila Mora","d":2,"e":"2026-06-08","dol":"2026-02-17","rcv":0,"sup":"Hazelene"},{"n":"18422 N. 29th Ave.","s":"APPR Send Demand","pa":"Sheena Lalunio","d":2,"e":"2026-06-08","dol":"2025-10-13","rcv":0,"sup":"Dillon"},{"n":"4161 E. Winterwood St.","s":"Review 1st EST","pa":"Sheena Lalunio","d":2,"e":"2026-06-08","dol":"2026-05-17","rcv":16915.75,"sup":""},{"n":"2550 E. Juanita Ave.","s":"Active Supp Negotaitions","pa":"Emmanuel Reblora","d":2,"e":"2026-06-08","dol":"2025-10-13","rcv":5224.07,"sup":"Dillon"},{"n":"7206 W. San Miguel Ave.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":2,"e":"2026-06-08","dol":"2025-11-19","rcv":0,"sup":"Dillon"},{"n":"1725 S. 2nd St.","s":"Review 1st EST","pa":"Daniel D\u00e1vila Mora","d":2,"e":"2026-06-08","dol":"2025-10-13","rcv":9231.49,"sup":"Geoff"},{"n":"2001 N. 86TH Ln.","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":2,"e":"2026-06-09","dol":"2025-10-13","rcv":2539.6,"sup":"Geoff"},{"n":"857 E. Hampton Ave.","s":"APPR Pend Ack","pa":"Sheena Lalunio","d":2,"e":"2026-06-09","dol":"2025-10-13","rcv":0,"sup":"Jesse"},{"n":"2103 E Hawthorne St","s":"Pending Supp","pa":"Mary Facio Rubio","d":1,"e":"2026-06-09","dol":"2026-01-26","rcv":0,"sup":"Dillon"},{"n":"1120 Pawnee Ln.","s":"Active Supp Negotaitions","pa":"David Delgado Lopez","d":1,"e":"2026-06-09","dol":"2025-08-24","rcv":0,"sup":"Dillon"},{"n":"1800 Chickasaw Dr.","s":"Pending Supp","pa":"David Delgado Lopez","d":1,"e":"2026-06-09","dol":"2025-08-24","rcv":7145.58,"sup":"Geoff"},{"n":"588 Burton St.","s":"Pending Supp","pa":"Raphael Rivera","d":1,"e":"2026-06-09","dol":"2025-09-26","rcv":0,"sup":"Hazelene"},{"n":"3213 N. Kirkland Rd.","s":"Pending Supp","pa":"Emmanuel Reblora","d":1,"e":"2026-06-09","dol":"2026-05-03","rcv":0,"sup":"Gerald Banaag"},{"n":"6013 E. Fox Hollow Lane","s":"Pending Supp","pa":"Daniel D\u00e1vila Mora","d":1,"e":"2026-06-09","dol":"2025-09-01","rcv":9236.92,"sup":"Jesse"},{"n":"9850 E. Boulder Dr.","s":"Active Supp Negotaitions","pa":"Mary Facio Rubio","d":1,"e":"2026-06-09","dol":"2025-09-26","rcv":3515.37,"sup":"Dillon"},{"n":"732 N. 18th St.","s":"APPR Pend Ack","pa":"Daniel D\u00e1vila Mora","d":1,"e":"2026-06-09","dol":"2026-02-17","rcv":15329.23,"sup":"Chris Dockendorff"},{"n":"343 S. Lesueur","s":"Review 1st EST","pa":"Daniel D\u00e1vila Mora","d":1,"e":"2026-06-10","dol":"2025-09-26","rcv":0,"sup":""},{"n":"815 W. Redfield Rd.","s":"APPR Pend Ack","pa":"Raphael Rivera","d":1,"e":"2026-06-10","dol":"2025-10-13","rcv":4976.07,"sup":"Dillon"},{"n":"1469 W Wood Dr.","s":"APPR Pend Est","pa":"Raphael Rivera","d":0,"e":"2026-06-10","dol":"2025-11-19","rcv":3253.48,"sup":"Isaac"},{"n":"3936 W. Alta Vista","s":"Review 1st EST","pa":"Sheena Lalunio","d":0,"e":"2026-06-10","dol":"2025-10-13","rcv":10985.01,"sup":""},{"n":"329 S. Lesueur","s":"Review 1st EST","pa":"Sheena Lalunio","d":0,"e":"2026-06-10","dol":"2025-09-26","rcv":9147.47,"sup":""},{"n":"4047 Foxgrove Dr.","s":"Active Supp Negotaitions","pa":"Daniel D\u00e1vila Mora","d":0,"e":"2026-06-10","dol":"2025-07-01","rcv":900.83,"sup":"Hazelene"},{"n":"4354 Shallimar Ave.","s":"Review 1st EST","pa":"Emmanuel Reblora","d":0,"e":"2026-06-10","dol":"2025-09-26","rcv":3149.79,"sup":""},{"n":"4691 Sun Valley Cir.","s":"Pre Const Review","pa":"Daniel D\u00e1vila Mora","sup":"Dillon","d":0,"e":"2026-06-08","dol":"","rcv":0},{"n":"3155 W. 31st Pl.","s":"Pre Const Review","pa":"Sheena Lalunio","sup":"Gerald Banaag","d":0,"e":"2026-06-09","dol":"","rcv":7936},{"n":"1201 E. Monroe St.","s":"Pre Const Review","pa":"David Delgado Lopez","sup":"Geoff","d":0,"e":"2026-06-10","dol":"","rcv":11208.63},{"n":"706 W. Vaughn St.","s":"Pre Const Review","pa":"Raphael Rivera","sup":"Geoff","d":0,"e":"2026-06-10","dol":"","rcv":0},{"n":"1721 E. Dakota St.","s":"Pre Const Review","pa":"Mary Facio Rubio","sup":"Dillon","d":10,"e":"2026-05-29","dol":"","rcv":0},{"n":"5801 E. 33rd St.","s":"Pre Const Review","pa":"Sheena Lalunio","sup":"Dillon","d":0,"e":"2026-06-09","dol":"","rcv":0},{"n":"649 N. Erin Ave.","s":"Pre Const Review","pa":"Mary Facio Rubio","sup":"Geoff","d":0,"e":"2026-06-10","dol":"","rcv":3132},{"n":"1621 W Villa Maria Dr","s":"Pre Const Review","pa":"Raphael Rivera","sup":"Dillon","d":3,"e":"2026-06-05","dol":"","rcv":0}];
+
+function ageClass(d) {
+  if (d <= 30) return 'age-green';
+  if (d <= 90) return 'age-amber';
+  return 'age-red';
+}
+
+function ageBadge(d) {
+  if (d > 180) return 'badge-red';
+  if (d > 90) return 'badge-amber';
+  return 'badge-green';
+}
+
+function buildTable(claims) {
+  var html = '<table><thead><tr><th style="text-align:left;">Claim</th><th>Supplementer</th><th>Assigned PA</th><th>Days in stage</th><th>Entered stage</th><th>Date of Loss</th><th>1st Est RCV</th></tr></thead><tbody>';
+  claims.forEach(function(c) {
+    var rcv = c.rcv ? '$' + Number(c.rcv).toLocaleString('en-US', {minimumFractionDigits:0, maximumFractionDigits:0}) : 'â';
+    html += '<tr><td>' + c.n + '</td><td>' + (c.sup || '\u2014') + '</td><td>' + c.pa + '</td>';
+    html += '<td><span class="badge ' + ageBadge(c.d) + '">' + c.d + 'd</span></td>';
+    html += '<td>' + c.e + '</td><td>' + c.dol + '</td><td>' + rcv + '</td></tr>';
+  });
+  html += '</tbody></table>';
+  return html;
+}
+
+var stageMap = {
+  'active-supp': 'Active Supp Negotaitions',
+  'appr-est': 'APPR Pend Est',
+  'pend-supp': 'Pending Supp',
+  'appr-ack': 'APPR Pend Ack',
+  'appr-review': 'APPR Review Est',
+  'pre-const': 'Pre Const Review',
+  'other': ['APPR Send Demand', 'Review 1st EST']
+};
+
+Object.entries(stageMap).forEach(function(e) {
+  var tabId = e[0], stage = e[1];
+  var filtered;
+  if (Array.isArray(stage)) {
+    filtered = claimData.filter(function(c) { return stage.indexOf(c.s) !== -1; });
+  } else {
+    filtered = claimData.filter(function(c) { return c.s === stage; });
+  }
+  filtered.sort(function(a,b) { return b.d - a.d; });
+  document.getElementById('tab-' + tabId).innerHTML = buildTable(filtered);
+});
+
+function showTab(tabId) {
+  document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+  document.querySelectorAll('.tab-content').forEach(function(t) { t.classList.remove('active'); });
+  document.getElementById('tab-' + tabId).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>
